@@ -1,93 +1,89 @@
-/*
-  Dieses Skript implementiert die Logik für die statische GitHub‑Pages‑Umfrage.
-  Es verbindet sich mit der Firebase Realtime Database, um Stimmen zu speichern
-  und die Ergebnisse in Echtzeit zu aktualisieren. Jede Stimmabgabe erhöht
-  atomar den jeweiligen Zähler mit ServerValue.increment(), was gleichzeitige
-  Zugriffe zuverlässig zusammenführt【203927408579846†L18-L30】.
+// Firebase Konfiguration
+const firebaseConfig = {
+  apiKey: "AIzaSyA-HwTJkj5v4En_SLnr7nc16rkwGk7NVLc",
+  authDomain: "statistic-umfrage.firebaseapp.com",
+  databaseURL: "https://statistic-umfrage-default-rtdb.firebaseio.com",
+  projectId: "statistic-umfrage",
+  storageBucket: "statistic-umfrage.firebasestorage.app",
+  messagingSenderId: "54072890599",
+  appId: "1:54072890599:web:d39926f9085dfd84ea7e42",
+  measurementId: "G-FDFL4EKQG9"
+};
 
-  Um die Umfrage zu betreiben, müssen Sie das firebaseConfig‑Objekt mit
-  Ihren eigenen Projektinformationen aus der Firebase-Konsole ausfüllen. Achten
-  Sie darauf, in den Firebase‑Security‑Rules Schreibzugriff nur auf den
-  gewünschten Datenpfad zu gewähren (z.B. read/write: true oder domain‑
-  basierte Regeln). Danach können Sie die Dateien in ein GitHub‑Repository
-  hochladen und GitHub Pages aktivieren.
-*/
+// Firebase starten
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-(() => {
-  // TODO: Ersetzen Sie die Platzhalter durch Ihre Firebase-Projektkonfiguration
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+// Formular
+const form = document.getElementById("voteForm");
+
+form.addEventListener("submit", function(e){
+  e.preventDefault();
+
+  const value = document.querySelector('input[name="answer"]:checked').value;
+
+  const ref = db.ref("votes/" + value);
+
+  ref.transaction(function(current){
+    return (current || 0) + 1;
+  });
+});
+
+// Balkendiagramm
+const bars = {
+  A: document.getElementById("barA"),
+  B: document.getElementById("barB"),
+  C: document.getElementById("barC"),
+  D: document.getElementById("barD")
+};
+
+const counts = {
+  A: document.getElementById("countA"),
+  B: document.getElementById("countB"),
+  C: document.getElementById("countC"),
+  D: document.getElementById("countD")
+};
+
+firebase.database().ref("votes").on("value", (snapshot) => {
+  const data = snapshot.val() || {};
+
+  let total = 0;
+  Object.values(data).forEach(v => total += v);
+
+  ["A","B","C","D"].forEach(letter => {
+    const value = data[letter] || 0;
+    counts[letter].innerText = value;
+
+    const percent = total ? (value / total) * 100 : 0;
+    bars[letter].style.width = percent + "%";
+  });
+
+  document.getElementById("chart").style.display = "block";
+});
+function scheduleHourlyReset() {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const seconds = now.getSeconds();
+
+  const msUntilNextHour =
+    ((60 - minutes) * 60 - seconds) * 1000;
+
+  setTimeout(() => {
+    resetVotes();
+    setInterval(resetVotes, 3600000);
+  }, msUntilNextHour);
+}
+
+function resetVotes() {
+  const resetData = {
+    A: 0,
+    B: 0,
+    C: 0,
+    D: 0
   };
-  // Initialisieren Sie Firebase nur, wenn die Konfigurationsdaten vorhanden sind
-  try {
-    firebase.initializeApp(firebaseConfig);
-  } catch (e) {
-    console.warn('Firebase konnte nicht initialisiert werden. Bitte fügen Sie Ihre Konfiguration in firebaseConfig ein.');
-  }
-  // Verweise auf DOM‑Elemente
-  const chartEl = document.getElementById('chart');
-  const form = document.getElementById('voteForm');
-  const submitBtn = document.getElementById('submitBtn');
 
-  /**
-   * Aktualisiert das Balkendiagramm anhand der aktuellen Stimmen. Die Breite
-   * jeder Leiste entspricht dem Verhältnis der jeweiligen Option zur Gesamtzahl
-   * der Stimmen. Die Funktion wird bei jedem Datenupdate aus Firebase aufgerufen.
-   *
-   * @param {Object} counts Objekt mit Schlüssel A–D und Zahlenwerten
-   */
-  function updateChart(counts) {
-    const total = (counts.A || 0) + (counts.B || 0) + (counts.C || 0) + (counts.D || 0);
-    if (total > 0) {
-      chartEl.style.display = 'block';
-    }
-    ['A', 'B', 'C', 'D'].forEach((opt) => {
-      const bar = document.getElementById(`bar${opt}`);
-      const countEl = document.getElementById(`count${opt}`);
-      const count = counts[opt] || 0;
-      const percentage = total > 0 ? (count / total) * 100 : 0;
-      bar.style.width = `${percentage}%`;
-      countEl.textContent = count;
-    });
-  }
+  firebase.database().ref("votes").set(resetData);
+}
 
-  // Nur weiterarbeiten, wenn Firebase initialisiert wurde
-  if (firebase.apps && firebase.apps.length) {
-    const db = firebase.database();
-    // Pfad für die Umfrage (kann angepasst werden)
-    const votesRef = db.ref('surveys/confidenceVotes');
-    // Listener: aktualisiert das Diagramm bei Datenänderungen
-    votesRef.on('value', (snapshot) => {
-      const data = snapshot.val() || {};
-      updateChart(data);
-    });
-    // Formular verarbeiten
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const formData = new FormData(form);
-      const option = formData.get('answer');
-      if (!option) return;
-      // Atomares Inkrement der ausgewählten Option
-      const updates = {};
-      updates[option] = firebase.database.ServerValue.increment(1);
-      votesRef.update(updates)
-        .then(() => {
-          // Felder deaktivieren, nachdem Stimme erfolgreich gespeichert wurde
-          submitBtn.disabled = true;
-          form.querySelectorAll('input[name="answer"]').forEach((el) => {
-            el.disabled = true;
-          });
-        })
-        .catch((err) => {
-          console.error('Fehler beim Speichern der Stimme:', err);
-          alert('Beim Speichern Ihrer Stimme ist ein Fehler aufgetreten. Bitte versuchen Sie es später erneut.');
-        });
-    });
-  }
+scheduleHourlyReset();
 })();
