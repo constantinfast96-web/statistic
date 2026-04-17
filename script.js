@@ -22,7 +22,7 @@ form.addEventListener("submit", function(e){
 
   const value = document.querySelector('input[name="answer"]:checked').value;
 
-  const ref = db.ref("votes/" + value);
+  const ref = db.ref("frage1/" + value);
 
   ref.transaction(function(current){
     return (current || 0) + 1;
@@ -44,7 +44,7 @@ const counts = {
   D: document.getElementById("countD")
 };
 
-firebase.database().ref("votes").on("value", (snapshot) => {
+firebase.database().ref("frage1").on("value", (snapshot) => {
   const data = snapshot.val() || {};
 
   let total = 0;
@@ -82,7 +82,7 @@ function resetVotes() {
     D: 0
   };
 
-  firebase.database().ref("votes").set(resetData);
+  firebase.database().ref("frage1").set(resetData);
 }
 
 scheduleHourlyReset();
